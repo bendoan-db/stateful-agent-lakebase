@@ -10,6 +10,7 @@
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, Generator, Optional, Sequence, TypedDict
@@ -89,6 +90,12 @@ if UC_TOOL_NAMES:
 VECTOR_SEARCH_TOOLS = []
 
 tools.extend(VECTOR_SEARCH_TOOLS)
+
+# DuckDuckGo web search tool
+from langchain_community.tools import DuckDuckGoSearchResults
+
+search_tool = DuckDuckGoSearchResults()
+tools.append(search_tool)
 
 # COMMAND ----------
 
@@ -318,7 +325,9 @@ class LangGraphResponsesAgent(ResponsesAgent):
         ci = dict(request.custom_inputs or {})
         thread_id = ci.get("thread_id")
         if not thread_id:
-            logger.error("No thread_id provided in custom_inputs. Messages will not be persisted.")
+            thread_id = uuid.uuid4().hex
+            ci["thread_id"] = thread_id
+            logger.info(f"No thread_id provided, generated: {thread_id}")
 
         if user_id:
             ci["user_id"] = user_id

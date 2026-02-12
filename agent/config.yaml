@@ -2,9 +2,9 @@ databricks:
   mlflow_experiment_name: stateful_agent
 
 unity_catalog:
-  catalog: "main"
-  schema: "default"
-  model_name: "stateful_agent"
+  catalog: "doan"
+  schema: "stateful_agent"
+  model_name: "stateful_langgraph_agent"
 
 llm:
   endpoint_name: "databricks-claude-sonnet-4-5"
