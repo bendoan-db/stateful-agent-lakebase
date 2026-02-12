@@ -7,6 +7,11 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install -r ../requirements.txt
+# MAGIC dbutils.library.restartPython() 
+
+# COMMAND ----------
+
 import os
 import sys
 import yaml
@@ -101,7 +106,7 @@ input_example = {
 
 with mlflow.start_run():
     model_info = mlflow.pyfunc.log_model(
-        name="stateful_agent",
+        artifact_path="stateful_agent",
         python_model=agent_path,
         model_config=agent_config_path,
         pip_requirements=pip_requirements,
@@ -121,12 +126,21 @@ print(f"Registered as: {REGISTERED_MODEL_NAME}")
 # COMMAND ----------
 
 from databricks.agents import deploy
+from dbruntime.databricks_repl_context import get_context
 
 deployment = deploy(
     model_name=REGISTERED_MODEL_NAME,
     model_version=model_info.registered_model_version,
+    environment_vars={
+        "DATABRICKS_URL": get_context().apiUrl,
+        "DATABRICKS_TOKEN": dbutils.secrets.get(scope="doan", key="db-pat-token")
+    },
 )
 
 print(f"Endpoint name : {deployment.endpoint_name}")
 print(f"Endpoint URL  : {deployment.endpoint_url}")
 print(f"Query endpoint: {deployment.query_endpoint}")
+
+# COMMAND ----------
+
+

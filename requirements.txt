@@ -7,3 +7,4 @@ langgraph
 langchain-community
 duckduckgo-search
 ddgs
+databricks-vectorsearch
