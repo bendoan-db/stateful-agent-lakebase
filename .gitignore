@@ -1,0 +1,18 @@
+
+.databricks
+
+# Claude
+CLAUDE.md
+**/CLAUDE.md
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.cache/
+
+# IDE
+.vscode/
