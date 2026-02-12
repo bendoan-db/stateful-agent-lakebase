@@ -1,6 +1,9 @@
-uv 
-databricks-agents 
-mlflow-skinny[databricks] 
+uv
+databricks-agents
+mlflow-skinny[databricks]
 databricks-langchain[memory]
 pyyaml
 langgraph
+langchain-community
+duckduckgo-search
+ddgs

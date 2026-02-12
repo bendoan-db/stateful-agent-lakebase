@@ -1,0 +1,26 @@
+store_table:
+  catalog: "doan_postgres"
+  schema: "public"
+  name: "store"
+
+unity_catalog:
+  catalog: "doan"
+  schema: "stateful_agent"
+  aggregated_conversations_table: "user_conversations"
+  aggregated_threads_table: "user_conversations_aggregated"
+  user_profiles_table: "user_preferences"
+
+summarizer:
+  llm_endpoint_name: "databricks-claude-sonnet-4-5"
+  prompt: >
+    Analyze the following conversation history for a single user and extract a
+    structured summary of their key interests, preferences, and behavioral patterns.
+    Return your response as a JSON object with these fields:
+    - "interests": list of topics the user has shown interest in
+    - "preferences": list of stated or inferred preferences
+    - "behavioral_notes": list of notable interaction patterns
+    - "summary": a brief 2-3 sentence profile of this user
+    RETURN ONLY THE JSON STRING AND NOTHING ELSE. DO NOT INCLUDE backticks or a json designation header. just the json dictionary
+  
+
+  
