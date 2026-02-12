@@ -1,0 +1,21 @@
+databricks:
+  mlflow_experiment_name: stateful_agent
+
+unity_catalog:
+  catalog: "main"
+  schema: "default"
+  model_name: "stateful_agent"
+
+llm:
+  endpoint_name: "databricks-claude-sonnet-4-5"
+  system_prompt: "You are a helpful assistant. Use the available tools to answer questions. All conversations are automatically saved to long-term memory. When the user asks about previous conversations, prior questions, or anything they've told you before, you MUST use the get_user_memory tool to search for relevant memories before responding."
+
+lakebase:
+  instance_name: "doan-langgraph-memory"
+
+embeddings:
+  endpoint: "databricks-gte-large-en"
+  dims: 1024
+
+tools:
+  uc_function_names: []
