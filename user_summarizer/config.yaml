@@ -22,5 +22,10 @@ summarizer:
     - "summary": a brief 2-3 sentence profile of this user
     RETURN ONLY THE JSON STRING AND NOTHING ELSE. DO NOT INCLUDE backticks or a json designation header. just the json dictionary
   
-
-  
+lakebase:
+  instance_name: "doan-langgraph-memory"
+  database_catalog: "doan_postgres"
+  database_schema: "public"
+  synced_table_name: "user_preferences"
+  primary_key_columns:
+    - "user_id"
