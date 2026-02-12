@@ -91,16 +91,19 @@ for uc_fn in config["tools"].get("uc_function_names", []):
         resources.append(mlflow.models.resources.DatabricksUCFunction(function_name=uc_fn))
 
 agent_path = os.path.join(notebook_dir, "agent.py")
+agent_config_path = os.path.join(notebook_dir, "config.yaml")
 
 input_example = {
     "input": [{"type": "message", "role": "user", "content": "Hello"}],
     "custom_inputs": {"thread_id": "example-thread-001"},
+    "context": {"user_id": "example-user-001"},
 }
 
 with mlflow.start_run():
     model_info = mlflow.pyfunc.log_model(
-        artifact_path="agent",
+        name="stateful_agent",
         python_model=agent_path,
+        model_config=agent_config_path,
         pip_requirements=pip_requirements,
         resources=resources,
         input_example=input_example,

@@ -12,11 +12,9 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Annotated, Any, Generator, Optional, Sequence, TypedDict
 
 import mlflow
-import yaml
 from databricks_langchain import (
     ChatDatabricks,
     DatabricksStore,
@@ -51,22 +49,20 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 # COMMAND ----------
 
-def load_config() -> dict:
-    """Load configuration from config.yaml file."""
-    config_path = Path(__file__).parent / "config.yaml"
-    with open(config_path) as f:
-        return yaml.safe_load(f)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.yaml")
 
-
-CONFIG = load_config()
+CONFIG = mlflow.models.ModelConfig(development_config=_CONFIG_PATH)
 
 # Extract configuration values
-LLM_ENDPOINT_NAME = CONFIG["llm"]["endpoint_name"]
-SYSTEM_PROMPT = CONFIG["llm"]["system_prompt"]
-LAKEBASE_INSTANCE_NAME = CONFIG["lakebase"]["instance_name"]
-EMBEDDING_ENDPOINT = CONFIG["embeddings"]["endpoint"]
-EMBEDDING_DIMS = CONFIG["embeddings"]["dims"]
-UC_TOOL_NAMES: list[str] = CONFIG["tools"]["uc_function_names"]
+llm_config = CONFIG.get("llm")
+LLM_ENDPOINT_NAME = llm_config.get("endpoint_name")
+SYSTEM_PROMPT = llm_config.get("system_prompt")
+LAKEBASE_INSTANCE_NAME = CONFIG.get("lakebase").get("instance_name")
+embeddings_config = CONFIG.get("embeddings")
+EMBEDDING_ENDPOINT = embeddings_config.get("endpoint")
+EMBEDDING_DIMS = embeddings_config.get("dims")
+UC_TOOL_NAMES: list[str] = CONFIG.get("tools").get("uc_function_names")
 
 # COMMAND ----------
 
