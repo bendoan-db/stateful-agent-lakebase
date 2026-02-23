@@ -26,6 +26,6 @@ lakebase:
   instance_name: "doan-langgraph-memory"
   database_catalog: "doan_postgres"
   database_schema: "public"
-  synced_table_name: "user_preferences"
+  synced_table_name: "user_preferences_online"
   primary_key_columns:
     - "user_id"

@@ -19,3 +19,6 @@ embeddings:
 
 tools:
   uc_function_names: []
+
+user_profiles:
+  table: "user_preferences_online"

@@ -64,11 +64,9 @@ print(f"Agent loaded: {type(AGENT).__name__}")
 # COMMAND ----------
 # Create test request with user context
 request = ResponsesAgentRequest(
-    #input=[{"type": "message", "role": "user", "content": "who is the most powerful anime character from a scientific basis?"}],
-    #input=[{"type": "message", "role": "user", "content": "what was the last question I asked you?"}],
-    input=[{"type": "message", "role": "user", "content": "what are the currently available beta features for databricks?"}],
-    custom_inputs={"thread_id": "test-thread-002"},
-    context=ChatContext(user_id="test-user-3"),
+    input=[{"type": "message", "role": "user", "content": "what databricks region and cloud am in?"}],
+    custom_inputs={"thread_id": "test-thread-003"},
+    context=ChatContext(user_id="ben.doan@databricks.com"),
 )
 # COMMAND ----------
 

@@ -30,6 +30,7 @@ from langchain_core.tools import tool
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt.tool_node import ToolNode
+from databricks_ai_bridge.lakebase import LakebaseClient
 from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import (
     ResponsesAgentRequest,
@@ -63,6 +64,9 @@ embeddings_config = CONFIG.get("embeddings")
 EMBEDDING_ENDPOINT = embeddings_config.get("endpoint")
 EMBEDDING_DIMS = embeddings_config.get("dims")
 UC_TOOL_NAMES: list[str] = CONFIG.get("tools").get("uc_function_names")
+
+user_profiles_config = CONFIG.get("user_profiles")
+USER_PROFILES_TABLE = user_profiles_config.get("table")
 
 # COMMAND ----------
 
@@ -226,8 +230,10 @@ class LangGraphResponsesAgent(ResponsesAgent):
         except Exception as e:
             logger.error(f"Failed to auto-save {role} message for user {user_id}: {e}")
 
-    def _create_graph(self):
+    def _create_graph(self, system_prompt: Optional[str] = None):
         """Create the LangGraph workflow"""
+        effective_prompt = system_prompt if system_prompt is not None else self.system_prompt
+
         def should_continue(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
@@ -237,9 +243,9 @@ class LangGraphResponsesAgent(ResponsesAgent):
 
         model_with_tools = self.model_with_all_tools
 
-        if self.system_prompt:
+        if effective_prompt:
             preprocessor = RunnableLambda(
-                lambda state: [{"role": "system", "content": self.system_prompt}] + state["messages"]
+                lambda state: [{"role": "system", "content": effective_prompt}] + state["messages"]
             )
         else:
             preprocessor = RunnableLambda(lambda state: state["messages"])
@@ -296,6 +302,56 @@ class LangGraphResponsesAgent(ResponsesAgent):
             return request.context.user_id
         return None
 
+    def _lookup_user_profile(self, user_id: str) -> Optional[dict]:
+        """Look up user profile from the Lakebase-synced Postgres table.
+
+        Returns a dict with profile fields on success, or None if not found/error.
+        """
+        store_user_id = f"user_memories.{user_id.replace('.', '-')}"
+        with mlflow.start_span(name="lookup_user_profile", span_type="RETRIEVER") as span:
+            span.set_inputs({"user_id": user_id, "store_user_id": store_user_id})
+            try:
+                client = LakebaseClient(instance_name=self.lakebase_instance_name)
+                rows = client.execute(
+                    f"SELECT summary, interests, preferences, behavioral_notes FROM {USER_PROFILES_TABLE} WHERE user_id = '{store_user_id}' LIMIT 1",
+                )
+                client.close()
+
+                if not rows:
+                    logger.info(f"No profile found for user_id={user_id}")
+                    span.set_outputs({"profile": None})
+                    return None
+
+                profile = {k: str(v) if v is not None else None for k, v in dict(rows[0]).items()}
+                logger.info(f"Loaded profile for user_id={user_id}")
+                span.set_outputs({"profile": profile})
+                return profile
+            except Exception as e:
+                logger.error(f"Error looking up user profile for {user_id}: {e}")
+                span.set_status("ERROR")
+                span.set_outputs({"error": str(e)})
+                return None
+
+    @mlflow.trace(name="build_system_prompt")
+    def _build_system_prompt(self, profile: Optional[dict] = None) -> str:
+        """Build the system prompt, optionally augmented with user profile context."""
+        if not profile:
+            logger.info(f"No profile found.")
+            return self.system_prompt
+
+        profile_section = "\n\n## User Profile Context\n"
+        if profile.get("summary"):
+            profile_section += f"**Summary:** {profile['summary']}\n"
+        if profile.get("interests"):
+            profile_section += f"**Interests:** {profile['interests']}\n"
+        if profile.get("preferences"):
+            profile_section += f"**Preferences:** {profile['preferences']}\n"
+        if profile.get("behavioral_notes"):
+            profile_section += f"**Behavioral Notes:** {profile['behavioral_notes']}\n"
+        profile_section += "\nUse this context to personalize your responses. Do not volunteer this information unprompted — use it implicitly to be more helpful."
+
+        return self.system_prompt + profile_section
+
     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
         """Non-streaming prediction"""
         outputs = [
@@ -337,7 +393,9 @@ class LangGraphResponsesAgent(ResponsesAgent):
         if thread_id:
             run_config["configurable"]["thread_id"] = thread_id
 
-        graph = self._create_graph()
+        profile = self._lookup_user_profile(user_id) if user_id else None
+        augmented_prompt = self._build_system_prompt(profile)
+        graph = self._create_graph(system_prompt=augmented_prompt)
 
         state_input = {"messages": cc_msgs}
         if user_id:
