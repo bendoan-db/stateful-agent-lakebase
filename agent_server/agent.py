@@ -94,7 +94,7 @@ class AgentState(TypedDict):
 _memory_tools = memory_tools()
 
 # ---------------------------------------------------------------------------
-# One-time store setup (uses SP credentials which have CREATE permission)
+# One-time store setup
 # ---------------------------------------------------------------------------
 
 _store_setup_done = False
@@ -102,21 +102,33 @@ _store_setup_lock = asyncio.Lock()
 
 
 async def _ensure_store_setup():
-    """Run store.setup() once using the app's default (SP) credentials."""
+    """Run store.setup() once to create required tables.
+
+    Tries with default (SP) credentials first.  If the Lakebase instance
+    doesn't grant CREATE on ``public``, the tables likely already exist
+    from a prior run or manual setup — log a warning and continue.
+    """
     global _store_setup_done
     if _store_setup_done:
         return
     async with _store_setup_lock:
         if _store_setup_done:
             return
-        async with AsyncDatabricksStore(
-            instance_name=LAKEBASE_INSTANCE_NAME,
-            embedding_endpoint=EMBEDDING_ENDPOINT,
-            embedding_dims=EMBEDDING_DIMS,
-        ) as store:
-            await store.setup()
+        try:
+            async with AsyncDatabricksStore(
+                instance_name=LAKEBASE_INSTANCE_NAME,
+                embedding_endpoint=EMBEDDING_ENDPOINT,
+                embedding_dims=EMBEDDING_DIMS,
+            ) as store:
+                await store.setup()
+            logger.info("Store tables initialized (one-time setup)")
+        except Exception as e:
+            logger.warning(
+                "store.setup() failed (%s) — assuming tables already exist. "
+                "If this is a fresh Lakebase instance, run setup manually with "
+                "a user that has CREATE permission on the public schema.", e
+            )
         _store_setup_done = True
-        logger.info("Store tables initialized (one-time setup)")
 
 
 def _create_graph(system_prompt: str):
