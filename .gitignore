@@ -14,5 +14,13 @@ __pycache__/
 *$py.class
 .cache/
 
+# Environment variables
+.env
+
+# Frontend clone and process logs
+e2e-chatbot-app-next/
+backend.log
+frontend.log
+
 # IDE
 .vscode/

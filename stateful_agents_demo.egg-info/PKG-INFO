@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: stateful-agents-demo
+Version: 0.1.0
+Summary: Databricks LangGraph stateful agent with long-term memory
+Requires-Python: >=3.11
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: databricks-langchain[memory]
+Requires-Dist: databricks-agents
+Requires-Dist: mlflow[databricks]>=3.6.0
+Requires-Dist: langgraph
+Requires-Dist: langchain-community
+Requires-Dist: duckduckgo-search
+Requires-Dist: python-dotenv
+Requires-Dist: httpx

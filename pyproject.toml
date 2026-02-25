@@ -1,0 +1,37 @@
+[project]
+name = "stateful-agents-demo"
+version = "0.1.0"
+description = "Databricks LangGraph stateful agent with long-term memory"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "databricks-langchain[memory]",
+    "databricks-agents",
+    "mlflow[databricks]>=3.6.0",
+    "langgraph",
+    "langchain-community",
+    "duckduckgo-search",
+    "python-dotenv",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "hatchling>=1.27.0",
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+quickstart = "scripts.quickstart:main"
+start-app = "scripts.start_app:main"
+start-server = "agent_server.start_server:main"
+agent-evaluate = "agent_server.evaluate_agent:evaluate"
+discover-tools = "scripts.discover_tools:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_server*", "scripts*"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

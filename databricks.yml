@@ -5,6 +5,37 @@
 bundle:
   name: stateful-agents-demo
 
+resources:
+  apps:
+    stateful-agent-app:
+      name: "stateful-agent-app"
+      description: "Stateful LangGraph agent with long-term memory"
+      source_code_path: .
+      config:
+        command: ["uv", "run", "start-app"]
+        env:
+          - name: LAKEBASE_INSTANCE_NAME
+            valueFrom: "database"
+          - name: MLFLOW_EXPERIMENT_ID
+            valueFrom: "experiment"
+          - name: MLFLOW_TRACKING_URI
+            value: "databricks"
+          - name: API_PROXY
+            value: "http://localhost:8000/invocations"
+          - name: CHAT_APP_PORT
+            value: "3000"
+      resources:
+        - name: "database"
+          description: "Lakebase instance for long-term memory"
+          database:
+            name: "doan-langgraph-memory"
+            permission: "READ_WRITE"
+        - name: "experiment"
+          description: "MLflow experiment for tracing"
+          mlflow_experiment:
+            experiment: "stateful_agent"
+            permission: "MANAGE"
+
 targets:
   dev:
     mode: development
