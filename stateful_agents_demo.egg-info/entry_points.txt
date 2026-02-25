@@ -1,0 +1,3 @@
+[console_scripts]
+start-app = scripts.start_app:main
+start-server = agent_server.start_server:main

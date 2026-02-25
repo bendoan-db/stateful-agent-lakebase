@@ -1,0 +1,16 @@
+command:
+  - "uv"
+  - "run"
+  - "start-app"
+
+env:
+  - name: LAKEBASE_INSTANCE_NAME
+    value: "doan-langgraph-memory"
+  - name: MLFLOW_EXPERIMENT_ID
+    valueFrom: "experiment"
+  - name: MLFLOW_TRACKING_URI
+    value: "databricks"
+  - name: API_PROXY
+    value: "http://localhost:8000/invocations"
+  - name: CHAT_APP_PORT
+    value: "3000"

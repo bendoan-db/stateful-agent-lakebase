@@ -8,5 +8,3 @@ langchain-community
 duckduckgo-search
 python-dotenv
 httpx
-uv
-ddgs
