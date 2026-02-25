@@ -29,7 +29,7 @@ resources:
           description: "Lakebase instance for long-term memory"
           database:
             name: "doan-langgraph-memory"
-            permission: "READ_WRITE"
+            permission: "CAN_CONNECT_AND_CREATE"
         - name: "experiment"
           description: "MLflow experiment for tracing"
           mlflow_experiment:
