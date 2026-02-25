@@ -24,11 +24,17 @@ import json
 import os
 import platform
 import re
-import secrets
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from agent_server.config import (
+    LAKEBASE_INSTANCE_NAME,
+    MLFLOW_EXPERIMENT_NAME,
+    MLFLOW_REGISTRY_URI,
+    MLFLOW_TRACKING_URI,
+)
 
 
 def print_header(text: str) -> None:
@@ -164,8 +170,8 @@ def setup_env_file() -> None:
             "# Databricks configuration\n"
             "DATABRICKS_CONFIG_PROFILE=DEFAULT\n"
             "MLFLOW_EXPERIMENT_ID=\n"
-            'MLFLOW_TRACKING_URI="databricks"\n'
-            'MLFLOW_REGISTRY_URI="databricks-uc"\n'
+            f'MLFLOW_TRACKING_URI="{MLFLOW_TRACKING_URI}"\n'
+            f'MLFLOW_REGISTRY_URI="{MLFLOW_REGISTRY_URI}"\n'
         )
         print_success("Created .env")
 
@@ -333,7 +339,7 @@ def setup_databricks_auth(profile_arg: str = None, host_arg: str = None) -> str:
 
     # Update .env with profile
     update_env_file("DATABRICKS_CONFIG_PROFILE", profile_name)
-    update_env_file("MLFLOW_TRACKING_URI", f'"databricks://{profile_name}"')
+    update_env_file("MLFLOW_TRACKING_URI", f'"{MLFLOW_TRACKING_URI}://{profile_name}"')
     print_success(f"Databricks profile '{profile_name}' saved to .env")
 
     return profile_name
@@ -354,13 +360,13 @@ def get_databricks_username(profile_name: str) -> str:
 
 
 def create_mlflow_experiment(profile_name: str, username: str) -> tuple[str, str]:
-    """Create an MLflow experiment and return (name, id)."""
-    print_step("Creating MLflow experiment...")
+    """Create or reuse an MLflow experiment and return (name, id)."""
+    print_step("Setting up MLflow experiment...")
 
-    experiment_name = f"/Users/{username}/agents-on-apps"
+    experiment_name = f"/Users/{username}/{MLFLOW_EXPERIMENT_NAME}"
 
     try:
-        # Try to create with default name
+        # Try to create the experiment
         result = run_command(
             ["databricks", "-p", profile_name, "experiments", "create-experiment",
              experiment_name, "--output", "json"],
@@ -372,21 +378,20 @@ def create_mlflow_experiment(profile_name: str, username: str) -> tuple[str, str
             print_success(f"Created experiment '{experiment_name}' with ID: {experiment_id}")
             return experiment_name, experiment_id
 
-        # Name already exists, try with random suffix
-        print("Experiment name already exists, creating with random suffix...")
-        random_suffix = secrets.token_hex(4)
-        experiment_name = f"/Users/{username}/agents-on-apps-{random_suffix}"
-
+        # Experiment already exists — look it up via the MLflow REST API
+        print(f"Experiment '{experiment_name}' already exists, reusing it...")
+        from urllib.parse import quote
         result = run_command(
-            ["databricks", "-p", profile_name, "experiments", "create-experiment",
-             experiment_name, "--output", "json"]
+            ["databricks", "-p", profile_name, "api", "get",
+             f"/api/2.0/mlflow/experiments/get-by-name?experiment_name={quote(experiment_name, safe='')}"],
         )
-        experiment_id = json.loads(result.stdout).get("experiment_id", "")
-        print_success(f"Created experiment '{experiment_name}' with ID: {experiment_id}")
+        experiment_data = json.loads(result.stdout)
+        experiment_id = experiment_data.get("experiment", {}).get("experiment_id", "")
+        print_success(f"Using existing experiment '{experiment_name}' with ID: {experiment_id}")
         return experiment_name, experiment_id
 
     except Exception as e:
-        print_error(f"Failed to create MLflow experiment: {e}")
+        print_error(f"Failed to create/get MLflow experiment: {e}")
         print_troubleshooting_api()
         sys.exit(1)
 
@@ -456,10 +461,10 @@ def setup_lakebase(profile_name: str, lakebase_arg: str = None) -> str:
         lakebase_name = lakebase_arg
         print(f"Using provided Lakebase instance: {lakebase_name}")
     else:
-        # Check if already set in .env
-        existing = get_env_value("LAKEBASE_INSTANCE_NAME")
+        # Check if already set in .env, then fall back to config default
+        existing = get_env_value("LAKEBASE_INSTANCE_NAME") or LAKEBASE_INSTANCE_NAME
         if existing:
-            print(f"Found existing Lakebase instance in .env: {existing}")
+            print(f"Current Lakebase instance: {existing}")
             new_value = input("Press Enter to keep this value, or enter a new instance name: ").strip()
             lakebase_name = new_value if new_value else existing
         else:

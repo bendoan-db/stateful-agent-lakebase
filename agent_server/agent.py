@@ -24,6 +24,14 @@ from mlflow.types.responses import (
     to_chat_completions_input,
 )
 
+from agent_server.config import (
+    EMBEDDING_DIMS,
+    EMBEDDING_ENDPOINT,
+    LAKEBASE_INSTANCE_NAME,
+    LLM_ENDPOINT_NAME,
+    SYSTEM_PROMPT,
+    UC_TOOL_NAMES,
+)
 from agent_server.utils import get_user_workspace_client, process_agent_astream_events
 from agent_server.utils_memory import (
     build_system_prompt,
@@ -36,24 +44,7 @@ from agent_server.utils_memory import (
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-LAKEBASE_INSTANCE_NAME = os.environ.get("LAKEBASE_INSTANCE_NAME", "doan-langgraph-memory")
-LLM_ENDPOINT_NAME = "databricks-claude-sonnet-4-5"
-EMBEDDING_ENDPOINT = "databricks-gte-large-en"
-EMBEDDING_DIMS = 1024
-
-SYSTEM_PROMPT = (
-    "You are a helpful assistant. Use the available tools to answer questions. "
-    "All conversations are automatically saved to long-term memory. "
-    "When the user asks about previous conversations, prior questions, or anything "
-    "they've told you before, you MUST use the get_user_memory tool to search for "
-    "relevant memories before responding."
-)
-
-UC_TOOL_NAMES: list[str] = []
+# Configuration imported from agent_server.config
 
 # ---------------------------------------------------------------------------
 # Static tools (created once at module level)
@@ -97,6 +88,16 @@ _memory_tools = memory_tools()
 # One-time store setup
 # ---------------------------------------------------------------------------
 
+def _open_store(workspace_client=None):
+    """Return an ``AsyncDatabricksStore`` context manager with standard config."""
+    return AsyncDatabricksStore(
+        instance_name=LAKEBASE_INSTANCE_NAME,
+        embedding_endpoint=EMBEDDING_ENDPOINT,
+        embedding_dims=EMBEDDING_DIMS,
+        workspace_client=workspace_client,
+    )
+
+
 _store_setup_done = False
 _store_setup_lock = asyncio.Lock()
 
@@ -115,11 +116,7 @@ async def _ensure_store_setup():
         if _store_setup_done:
             return
         try:
-            async with AsyncDatabricksStore(
-                instance_name=LAKEBASE_INSTANCE_NAME,
-                embedding_endpoint=EMBEDDING_ENDPOINT,
-                embedding_dims=EMBEDDING_DIMS,
-            ) as store:
+            async with _open_store() as store:
                 await store.setup()
             logger.info("Store tables initialized (one-time setup)")
         except Exception as e:
@@ -241,12 +238,7 @@ async def stream_agent(request: ResponsesAgentRequest):
     user_client = get_user_workspace_client()
 
     # Open an async store connection for the lifetime of this request
-    async with AsyncDatabricksStore(
-        instance_name=LAKEBASE_INSTANCE_NAME,
-        embedding_endpoint=EMBEDDING_ENDPOINT,
-        embedding_dims=EMBEDDING_DIMS,
-        workspace_client=user_client,
-    ) as store:
+    async with _open_store(workspace_client=user_client) as store:
 
         # Look up user profile and build augmented system prompt
         profile = await lookup_user_profile(user_id, workspace_client=user_client) if user_id else None

@@ -1,21 +1,11 @@
 """Grant Lakebase PostgreSQL permissions to a Databricks App's service principal."""
 
 import argparse
-import os
 
 from databricks.sdk import WorkspaceClient
 from databricks_ai_bridge.lakebase import LakebaseClient
 
-STORE_TABLES = [
-    "checkpoint_migrations",
-    "checkpoint_writes",
-    "checkpoints",
-    "checkpoint_blobs",
-    "store_migrations",
-    "vector_migrations",
-    "store",
-    "store_vectors",
-]
+from agent_server.config import APP_NAME, LAKEBASE_INSTANCE_NAME, STORE_TABLES
 
 
 def grant_permissions(lakebase_instance: str, sp_id: str, workspace_client=None):
@@ -47,11 +37,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Grant Lakebase permissions to a Databricks App's service principal"
     )
-    parser.add_argument("--app-name", default="stateful-agent-app")
-    parser.add_argument(
-        "--lakebase-instance",
-        default=os.environ.get("LAKEBASE_INSTANCE_NAME", "doan-langgraph-memory"),
-    )
+    parser.add_argument("--app-name", default=APP_NAME)
+    parser.add_argument("--lakebase-instance", default=LAKEBASE_INSTANCE_NAME)
     parser.add_argument(
         "--sp-id", help="Explicit SP client ID (auto-detected from app if omitted)"
     )

@@ -8,12 +8,10 @@
 
 # COMMAND ----------
 
-import os
-from pathlib import Path
-
-import yaml
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import functions as F
 from pyspark.sql import Window
+
+from user_summarizer.utils import get_spark, load_config
 
 # COMMAND ----------
 
@@ -21,13 +19,6 @@ from pyspark.sql import Window
 # MAGIC ## Environment setup
 
 # COMMAND ----------
-
-def get_spark() -> SparkSession:
-    """Return the active SparkSession — works on Databricks and locally via Databricks Connect."""
-    if "spark" in globals():
-        return globals()["spark"]
-    from databricks.connect import DatabricksSession
-    return DatabricksSession.builder.getOrCreate()
 
 spark = get_spark()
 
@@ -38,9 +29,7 @@ spark = get_spark()
 
 # COMMAND ----------
 
-config_path = Path(__file__).parent / "config.yaml" if "__file__" in dir() else Path(os.getcwd()) / "config.yaml"
-with open(config_path) as f:
-    config = yaml.safe_load(f)
+config = load_config()
 
 uc_cfg = config["unity_catalog"]
 INPUT_TABLE = f"{uc_cfg['catalog']}.{uc_cfg['schema']}.{uc_cfg['aggregated_conversations_table']}"

@@ -8,18 +8,15 @@
 
 # COMMAND ----------
 
-import os
-from pathlib import Path
-
-import yaml
 from databricks.sdk import WorkspaceClient
-from pyspark.sql import SparkSession
 from databricks.sdk.service.database import (
     NewPipelineSpec,
     SyncedDatabaseTable,
     SyncedTableSchedulingPolicy,
     SyncedTableSpec,
 )
+
+from user_summarizer.utils import get_spark, load_config
 
 # COMMAND ----------
 
@@ -28,9 +25,7 @@ from databricks.sdk.service.database import (
 
 # COMMAND ----------
 
-config_path = Path(__file__).parent / "config.yaml" if "__file__" in dir() else Path(os.getcwd()) / "config.yaml"
-with open(config_path) as f:
-    config = yaml.safe_load(f)
+config = load_config()
 
 uc_cfg = config["unity_catalog"]
 SOURCE_TABLE = f"{uc_cfg['catalog']}.{uc_cfg['schema']}.{uc_cfg['user_profiles_table']}"
@@ -48,13 +43,6 @@ print(f"Synced table : {SYNCED_TABLE}")
 # MAGIC ## Enable Change Data Feed on source table
 
 # COMMAND ----------
-
-def get_spark() -> SparkSession:
-    """Return the active SparkSession — works on Databricks and locally via Databricks Connect."""
-    if "spark" in globals():
-        return globals()["spark"]
-    from databricks.connect import DatabricksSession
-    return DatabricksSession.builder.getOrCreate()
 
 spark = get_spark()
 

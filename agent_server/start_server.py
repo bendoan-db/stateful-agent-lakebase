@@ -2,7 +2,7 @@
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=".env", override=True)
 
 # Importing agent registers the @invoke/@stream decorators
 import agent_server.agent  # noqa: F401

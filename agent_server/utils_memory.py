@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -13,13 +12,13 @@ from langchain_core.tools import tool
 from databricks_ai_bridge.lakebase import LakebaseClient
 from mlflow.types.responses import ResponsesAgentRequest
 
+from agent_server.config import (
+    LAKEBASE_INSTANCE_NAME,
+    USER_PROFILES_TABLE,
+    get_memory_namespace,
+)
+
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# User identity extraction
-# ---------------------------------------------------------------------------
-
-USER_PROFILES_TABLE = "user_preferences_online"
 
 
 def get_user_id(request: ResponsesAgentRequest) -> Optional[str]:
@@ -52,7 +51,7 @@ def memory_tools():
         if not user_id or not store:
             return "Memory not available - no user_id provided."
 
-        namespace = ("user_memories", user_id.replace(".", "-"))
+        namespace = get_memory_namespace(user_id)
         results = await store.asearch(namespace, query=query, limit=5)
 
         if not results:
@@ -80,7 +79,7 @@ def memory_tools():
         if not user_id or not store:
             return "Cannot save memory - no user_id provided."
 
-        namespace = ("user_memories", user_id.replace(".", "-"))
+        namespace = get_memory_namespace(user_id)
         timestamp = datetime.now(timezone.utc).isoformat()
         await store.aput(namespace, key, {"value": value, "timestamp": timestamp})
         return f"Successfully saved memory with key '{key}' for user."
@@ -100,7 +99,7 @@ def memory_tools():
         if not user_id or not store:
             return "Cannot delete memory - no user_id provided."
 
-        namespace = ("user_memories", user_id.replace(".", "-"))
+        namespace = get_memory_namespace(user_id)
         await store.adelete(namespace, memory_key)
         return f"Successfully deleted memory with key '{memory_key}' for user."
 
@@ -114,7 +113,7 @@ def memory_tools():
 
 async def save_message_to_store(store, user_id: str, thread_id: str, role: str, content: str) -> None:
     """Save a message to the Lakebase store for automatic conversation persistence."""
-    namespace = ("user_memories", user_id.replace(".", "-"))
+    namespace = get_memory_namespace(user_id)
     key = f"{thread_id}-{role}"
     timestamp = datetime.now(timezone.utc).isoformat()
     value = {"role": role, "content": content, "timestamp": timestamp}
@@ -136,14 +135,14 @@ async def lookup_user_profile(user_id: str, workspace_client=None) -> Optional[d
     Wraps the synchronous ``LakebaseClient`` query in ``asyncio.to_thread``
     so it doesn't block the event loop.
     """
-    lakebase_instance = os.environ.get("LAKEBASE_INSTANCE_NAME", "doan-langgraph-memory")
-    store_user_id = f"user_memories.{user_id.replace('.', '-')}"
+    ns = get_memory_namespace(user_id)
+    store_user_id = f"{ns[0]}.{ns[1]}"
 
     def _sync_lookup():
         with mlflow.start_span(name="lookup_user_profile", span_type="RETRIEVER") as span:
             span.set_inputs({"user_id": user_id, "store_user_id": store_user_id})
             try:
-                client = LakebaseClient(instance_name=lakebase_instance, workspace_client=workspace_client)
+                client = LakebaseClient(instance_name=LAKEBASE_INSTANCE_NAME, workspace_client=workspace_client)
                 rows = client.execute(
                     f"SELECT summary, interests, preferences, behavioral_notes "
                     f"FROM {USER_PROFILES_TABLE} WHERE user_id = '{store_user_id}' LIMIT 1",
