@@ -13,11 +13,16 @@ graph TB
     end
 
     subgraph "Databricks App — AgentServer"
-        FE[Next.js Chat Frontend<br/><i>e2e-chatbot-app-next</i>]
+        FE[Next.js Chat Frontend<br/><i>e2e-chatbot-app-next — ephemeral mode</i>]
         SS["@stream entry point"]
 
+        subgraph "Authentication"
+            OBO[Get User Token<br/><i>x-forwarded-access-token → WorkspaceClient</i>]
+            SETUP[One-time Store Setup<br/><i>SP credentials — CREATE permission</i>]
+        end
+
         subgraph "Pre-processing"
-            PL[Profile Lookup<br/><i>LakebaseClient → user_preferences_online</i>]
+            PL[Profile Lookup<br/><i>LakebaseClient — user credentials</i>]
             BP[Build System Prompt<br/><i>Base prompt + user profile context</i>]
             SM[Save User Message<br/><i>Auto-persist to Lakebase store</i>]
         end
@@ -39,7 +44,9 @@ graph TB
 
     U --> FE
     FE --> SS
-    SS --> PL
+    SS --> OBO
+    OBO --> SETUP
+    SETUP --> PL
     PL --> BP
     BP --> SM
     SM --> A
@@ -60,6 +67,8 @@ graph TB
     PL -. "query profile" .-> LB
 
     style FE fill:#e8f5e9
+    style OBO fill:#fce4ec
+    style SETUP fill:#fce4ec
     style PL fill:#e1f5fe
     style BP fill:#e1f5fe
     style LB fill:#fff3e0
@@ -143,7 +152,7 @@ The summarizer pipeline produces structured profiles with the following fields:
 │   ├── agent.py               # @invoke/@stream + async LangGraph graph
 │   ├── evaluate_agent.py      # Agent evaluation with MLflow scorers
 │   ├── start_server.py        # AgentServer bootstrap with chat proxy
-│   ├── utils.py               # Stream processing helpers
+│   ├── utils.py               # Stream processing + OBO auth helpers
 │   └── utils_memory.py        # Async memory tools + profile lookup
 ├── scripts/                   # CLI tools and app startup
 │   ├── __init__.py
@@ -217,6 +226,62 @@ At the start of each request, the agent:
 1. Looks up the user's profile from the `user_preferences_online` Lakebase table
 2. Appends a `## User Profile Context` section to the system prompt with the user's summary, interests, preferences, and behavioral notes
 3. Instructs the LLM to use this context implicitly without volunteering it unprompted
+
+### Authentication & Lakebase Credentials
+
+The agent uses a two-tier authentication model for Lakebase access:
+
+**On-Behalf-Of-User (OBO) — Deployed App**
+
+When deployed as a Databricks App with [User Authorization](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth) enabled, the Databricks Apps proxy injects an `x-forwarded-access-token` header containing the end user's OAuth token. The agent uses this token to create a `WorkspaceClient` that authenticates to Lakebase as the user, not the app's service principal.
+
+```
+User Request → Databricks Apps Proxy → x-forwarded-access-token header
+                                        ↓
+                              get_user_workspace_client()
+                                        ↓
+                              WorkspaceClient(host=..., token=user_token)
+                                        ↓
+                    ┌───────────────────┴───────────────────┐
+                    ↓                                       ↓
+        AsyncDatabricksStore(                   LakebaseClient(
+          workspace_client=user_client)           workspace_client=user_client)
+        → read/write memories                   → query user_preferences_online
+```
+
+The `AsyncDatabricksStore` and `LakebaseClient` use the workspace client to:
+1. Resolve the Lakebase instance DNS via `database.get_database_instance()`
+2. Derive the PostgreSQL username via `current_user.me()`
+3. Mint rotating OAuth tokens via `database.generate_database_credential()` for PostgreSQL password auth
+
+**Store Table Setup — Service Principal**
+
+The `store.setup()` call creates tables (`store_migrations`, item storage) which requires CREATE permission on the `public` schema. End users typically only have READ_WRITE access. To handle this, table setup runs once at startup using the app's default service principal credentials (which have the database resource binding permissions), while per-request operations use the user's OBO token:
+
+```python
+# One-time setup with SP credentials (CREATE permission)
+await _ensure_store_setup()
+
+# Per-request with user credentials (READ_WRITE permission)
+async with AsyncDatabricksStore(..., workspace_client=user_client) as store:
+    ...
+```
+
+**Local Development Fallback**
+
+When running locally, the `x-forwarded-access-token` header doesn't exist. `get_user_workspace_client()` falls back to `WorkspaceClient()` which uses default credentials from `.env` (PAT or CLI profile).
+
+**Prerequisites for OBO**
+
+User Authorization is a Public Preview feature that requires workspace admin setup:
+1. Enable User Authorization in workspace Admin Settings
+2. Add OAuth scopes to the app (e.g., `all-apis`, `offline_access`)
+3. Restart the app after enabling
+4. Users see a one-time consent prompt on first access
+
+**Frontend Database Isolation**
+
+The `start_app.py` script strips `PG*` and `POSTGRES_URL` environment variables from the frontend process. This prevents the Next.js frontend (which includes Drizzle ORM) from attempting database migrations against the shared Lakebase instance. The frontend runs in ephemeral mode — the backend handles all persistence.
 
 ### Frontend
 
@@ -296,15 +361,29 @@ uv run discover-tools --format json --output tools.json
 Deploy as a Databricks App:
 
 ```bash
-# Sync code to workspace
-databricks sync . /Workspace/Users/<user>/stateful-agents-demo
+# Deploy with Databricks Asset Bundles
+databricks bundle deploy -t dev
 
-# Deploy the app
+# Or sync and deploy manually
+databricks sync . /Workspace/Users/<user>/stateful-agents-demo
 databricks apps deploy stateful-agent-app \
   --source-code-path /Workspace/Users/<user>/stateful-agents-demo
 ```
 
 The app configuration in `databricks.yml` binds the Lakebase instance and MLflow experiment as managed resources.
+
+**Important:** `LAKEBASE_INSTANCE_NAME` is set as a static `value` (not `valueFrom`) in `app.yaml` and `databricks.yml`. The `valueFrom: "database"` binding injects the PGHOST DNS hostname, but `AsyncDatabricksStore` requires the logical instance name to resolve the instance via the Databricks API. The `database` resource binding is still declared for permission grants.
+
+**Enabling User Authorization (required for OBO auth):**
+
+1. Ask a workspace admin to enable User Authorization (Public Preview) in Admin Settings
+2. Add OAuth scopes to the app:
+   ```bash
+   databricks account custom-app-integration update '<APP_ID>' --json \
+     '{"scopes": ["offline_access", "all-apis"]}'
+   ```
+3. Restart the deployed app
+4. On first access, users will see a consent prompt to authorize the app
 
 ### Testing the Deployed App
 

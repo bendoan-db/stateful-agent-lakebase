@@ -29,8 +29,8 @@ start-server = "agent_server.start_server:main"
 agent-evaluate = "agent_server.evaluate_agent:evaluate"
 discover-tools = "scripts.discover_tools:main"
 
-[tool.setuptools.packages.find]
-include = ["agent_server*", "scripts*"]
+[tool.hatch.build.targets.wheel]
+packages = ["agent_server", "scripts"]
 
 [build-system]
 requires = ["hatchling"]

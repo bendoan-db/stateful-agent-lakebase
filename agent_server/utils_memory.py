@@ -130,7 +130,7 @@ async def save_message_to_store(store, user_id: str, thread_id: str, role: str, 
 # ---------------------------------------------------------------------------
 
 
-async def lookup_user_profile(user_id: str) -> Optional[dict]:
+async def lookup_user_profile(user_id: str, workspace_client=None) -> Optional[dict]:
     """Look up user profile from the Lakebase-synced Postgres table.
 
     Wraps the synchronous ``LakebaseClient`` query in ``asyncio.to_thread``
@@ -143,7 +143,7 @@ async def lookup_user_profile(user_id: str) -> Optional[dict]:
         with mlflow.start_span(name="lookup_user_profile", span_type="RETRIEVER") as span:
             span.set_inputs({"user_id": user_id, "store_user_id": store_user_id})
             try:
-                client = LakebaseClient(instance_name=lakebase_instance)
+                client = LakebaseClient(instance_name=lakebase_instance, workspace_client=workspace_client)
                 rows = client.execute(
                     f"SELECT summary, interests, preferences, behavioral_notes "
                     f"FROM {USER_PROFILES_TABLE} WHERE user_id = '{store_user_id}' LIMIT 1",

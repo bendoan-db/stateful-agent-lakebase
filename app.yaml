@@ -5,7 +5,7 @@ command:
 
 env:
   - name: LAKEBASE_INSTANCE_NAME
-    valueFrom: "database"
+    value: "doan-langgraph-memory"
   - name: MLFLOW_EXPERIMENT_ID
     valueFrom: "experiment"
   - name: MLFLOW_TRACKING_URI

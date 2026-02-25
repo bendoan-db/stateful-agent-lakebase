@@ -1,5 +1,6 @@
 """Core LangGraph agent with @invoke/@stream decorators for AgentServer."""
 
+import asyncio
 import logging
 import os
 import uuid
@@ -23,7 +24,7 @@ from mlflow.types.responses import (
     to_chat_completions_input,
 )
 
-from agent_server.utils import process_agent_astream_events
+from agent_server.utils import get_user_workspace_client, process_agent_astream_events
 from agent_server.utils_memory import (
     build_system_prompt,
     get_user_id,
@@ -91,6 +92,31 @@ class AgentState(TypedDict):
 # ---------------------------------------------------------------------------
 
 _memory_tools = memory_tools()
+
+# ---------------------------------------------------------------------------
+# One-time store setup (uses SP credentials which have CREATE permission)
+# ---------------------------------------------------------------------------
+
+_store_setup_done = False
+_store_setup_lock = asyncio.Lock()
+
+
+async def _ensure_store_setup():
+    """Run store.setup() once using the app's default (SP) credentials."""
+    global _store_setup_done
+    if _store_setup_done:
+        return
+    async with _store_setup_lock:
+        if _store_setup_done:
+            return
+        async with AsyncDatabricksStore(
+            instance_name=LAKEBASE_INSTANCE_NAME,
+            embedding_endpoint=EMBEDDING_ENDPOINT,
+            embedding_dims=EMBEDDING_DIMS,
+        ) as store:
+            await store.setup()
+        _store_setup_done = True
+        logger.info("Store tables initialized (one-time setup)")
 
 
 def _create_graph(system_prompt: str):
@@ -196,16 +222,22 @@ async def stream_agent(request: ResponsesAgentRequest):
     # Convert input messages
     cc_msgs = to_chat_completions_input([i.model_dump() for i in request.input])
 
+    # Ensure store tables exist (one-time, uses SP credentials with CREATE permission)
+    await _ensure_store_setup()
+
+    # Authenticate as the end user (forwarded OAuth token) or fall back to local creds
+    user_client = get_user_workspace_client()
+
     # Open an async store connection for the lifetime of this request
     async with AsyncDatabricksStore(
         instance_name=LAKEBASE_INSTANCE_NAME,
         embedding_endpoint=EMBEDDING_ENDPOINT,
         embedding_dims=EMBEDDING_DIMS,
+        workspace_client=user_client,
     ) as store:
-        await store.setup()
 
         # Look up user profile and build augmented system prompt
-        profile = await lookup_user_profile(user_id) if user_id else None
+        profile = await lookup_user_profile(user_id, workspace_client=user_client) if user_id else None
         augmented_prompt = build_system_prompt(SYSTEM_PROMPT, profile)
 
         # Build graph

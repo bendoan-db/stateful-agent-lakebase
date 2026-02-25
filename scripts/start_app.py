@@ -110,10 +110,11 @@ class ProcessManager:
         shutil.rmtree("temp-app-templates", ignore_errors=True)
         return True
 
-    def start_process(self, cmd, name, log_file, patterns, cwd=None):
+    def start_process(self, cmd, name, log_file, patterns, cwd=None, env=None):
         print(f"Starting {name}...")
         process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=cwd
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            cwd=cwd, env=env,
         )
 
         thread = threading.Thread(
@@ -175,11 +176,18 @@ class ProcessManager:
             )
 
             # Setup and start frontend
+            # Strip PG* env vars so the frontend runs in ephemeral mode
+            # (no Drizzle migrations). The backend handles all persistence.
+            frontend_env = {
+                k: v for k, v in os.environ.items()
+                if not k.startswith("PG") and k != "POSTGRES_URL"
+            }
             frontend_dir = Path("e2e-chatbot-app-next")
             for cmd, desc in [("npm install", "install"), ("npm run build", "build")]:
                 print(f"Running npm {desc}...")
                 result = subprocess.run(
-                    cmd.split(), cwd=frontend_dir, capture_output=True, text=True
+                    cmd.split(), cwd=frontend_dir, capture_output=True, text=True,
+                    env=frontend_env,
                 )
                 if result.returncode != 0:
                     print(f"npm {desc} failed: {result.stderr}")
@@ -191,6 +199,7 @@ class ProcessManager:
                 self.frontend_log,
                 FRONTEND_READY,
                 cwd=frontend_dir,
+                env=frontend_env,
             )
 
             print(

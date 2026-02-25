@@ -1,8 +1,11 @@
 """Stream processing and auth helpers for the AgentServer."""
 
+import logging
 import os
 
 from databricks.sdk import WorkspaceClient
+
+logger = logging.getLogger(__name__)
 from langchain_core.messages import AIMessageChunk
 from mlflow.types.responses import (
     ResponsesAgentStreamEvent,
@@ -15,14 +18,28 @@ def get_user_workspace_client() -> WorkspaceClient:
     """Create a WorkspaceClient using the forwarded user token (on-behalf-of-user auth).
 
     The ``x-forwarded-access-token`` header is injected by the Databricks Apps
-    proxy and carries the end-user's OAuth token.
+    proxy when **User Authorization (OBO)** is enabled at the workspace level.
+    Falls back to default credentials for local development or when OBO is not
+    enabled.
     """
-    from mlflow.genai.agent_server.utils import get_request_headers
+    try:
+        from mlflow.genai.agent_server.utils import get_request_headers
 
-    headers = get_request_headers()
-    user_token = headers.get("x-forwarded-access-token")
-    host = get_databricks_host_from_env()
-    return WorkspaceClient(host=host, token=user_token)
+        headers = get_request_headers()
+        user_token = headers.get("x-forwarded-access-token")
+        if user_token:
+            logger.info("Using on-behalf-of-user token from x-forwarded-access-token")
+            host = get_databricks_host_from_env()
+            return WorkspaceClient(host=host, token=user_token)
+        else:
+            logger.info(
+                "x-forwarded-access-token not present — OBO User Authorization "
+                "may not be enabled. Falling back to default credentials."
+            )
+    except Exception as e:
+        logger.warning(f"Could not retrieve request headers: {e}")
+    # Fall back to default credentials (local dev / PAT from .env / SP credentials)
+    return WorkspaceClient()
 
 
 def get_databricks_host_from_env() -> str:
